@@ -2,3 +2,7 @@ __pycache__
 .env
 rclone.conf
 venv/
+raw/
+active_tmp/
+idle/
+.DS_Store
