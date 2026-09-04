@@ -42,11 +42,21 @@ if USE_OPENCL:
     cv2.ocl.setUseOpenCL(True)
 
 
+# Events that actually gate resume/skip decisions (already_verified_zips,
+# drive_sync._already_processed_videos) plus the start/end markers -- these
+# are the only ones written to processing_log.jsonl. Everything else
+# (per-attempt retries, per-file download/upload/error detail) still prints
+# to the terminal via log_event below, it just isn't persisted, to keep the
+# log file from growing unbounded with per-segment noise.
+PERSISTED_EVENTS = {"video_start", "video_done", "extract_start", "extract_done", "zip_verified"}
+
+
 def log_event(event: dict):
     event["ts"] = time.time()
-    with LOG_PATH.open("a") as f:
-        f.write(json.dumps(event) + "\n")
     print(json.dumps(event))
+    if event.get("event") in PERSISTED_EVENTS:
+        with LOG_PATH.open("a") as f:
+            f.write(json.dumps(event) + "\n")
 
 
 def ffprobe_duration(path: Path) -> float:

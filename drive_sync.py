@@ -65,8 +65,12 @@ def _already_processed_videos():
 
 
 def download_and_process_new_videos():
-    """Download every new video first, then run OpenCV motion-detect/cut on
-    each one. A video already sitting in ./raw from a prior run that
+    """Download and process one video at a time -- download, then
+    immediately run it through process_video() (which deletes the raw file
+    once it's settled) before moving on to the next -- so only one raw video
+    occupies disk space at a time, and the combining (merge) step only
+    starts once every video has been downloaded and split into
+    active_tmp/idle. A video already sitting in ./raw from a prior run that
     crashed before finishing (e.g. a missing ffmpeg) is reprocessed without
     being re-downloaded."""
     done = _already_processed_videos()
@@ -77,13 +81,15 @@ def download_and_process_new_videos():
     entries = json.loads(out.stdout)
 
     pf.RAW_DIR.mkdir(parents=True, exist_ok=True)
-    to_process = []
+    found_new = False
     for e in entries:
         if e.get("IsDir") or not e["Name"].endswith(".mp4"):
             continue
         local_path = pf.RAW_DIR / e["Name"]
         if str(local_path) in done:
             continue
+        found_new = True
+
         if not local_path.exists():
             print(f"downloading: {e['Name']}")
             subprocess.run(
@@ -92,13 +98,7 @@ def download_and_process_new_videos():
                 check=True,
             )
             pf.log_event({"event": "video_downloaded", "video": str(local_path)})
-        to_process.append(local_path)
 
-    if not to_process:
-        print("no new videos on Drive")
-        return
-
-    for local_path in to_process:
         try:
             pf.log_event({"event": "video_start", "video": str(local_path)})
             pf.process_video(local_path)
