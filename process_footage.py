@@ -43,12 +43,16 @@ if USE_OPENCL:
 
 
 # Events that actually gate resume/skip decisions (already_verified_zips,
-# drive_sync._already_processed_videos) plus the start/end markers -- these
-# are the only ones written to processing_log.jsonl. Everything else
-# (per-attempt retries, per-file download/upload/error detail) still prints
-# to the terminal via log_event below, it just isn't persisted, to keep the
-# log file from growing unbounded with per-segment noise.
-PERSISTED_EVENTS = {"video_start", "video_done", "extract_start", "extract_done", "zip_verified"}
+# drive_sync._already_processed_videos, drive_sync._already_uploaded_files)
+# plus the start/end markers -- these are the only ones written to
+# processing_log.jsonl. Everything else (per-attempt retries, per-file
+# download/error detail) still prints to the terminal via log_event below,
+# it just isn't persisted, to keep the log file from growing unbounded with
+# per-segment noise.
+PERSISTED_EVENTS = {
+    "video_start", "video_done", "extract_start", "extract_done",
+    "zip_verified", "upload_verified",
+}
 
 
 def log_event(event: dict):
@@ -208,39 +212,51 @@ def samples_to_segments(samples, duration: float):
     return filtered
 
 
-def cut_segment(src: Path, start: float, end: float, dest: Path, tolerant: bool = False):
-    """tolerant=True regenerates PTS/DTS and ignores/discards corrupt packets
-    instead of trusting src's own timestamps -- the same recovery ffmpeg
-    flags try_recover() uses for a whole unreadable file, applied here to a
-    single segment whose cut failed because of broken timestamps (e.g.
-    "non monotonically increasing dts") rather than a missing video stream."""
+CUT_MODES = ["copy", "tolerant", "reencode"]
+
+
+def cut_segment(src: Path, start: float, end: float, dest: Path, mode: str = "copy"):
+    """mode="copy": fast lossless stream-copy, used for the first attempt.
+    mode="tolerant": same stream-copy but regenerates PTS/DTS and discards
+    corrupt packets instead of trusting src's own timestamps -- the same
+    recovery flags try_recover() uses for a whole unreadable file, applied
+    here to one segment. Fixes stream-level corruption (e.g. a bad NAL unit)
+    but not a source whose frame/timestamp *ordering* is itself broken (e.g.
+    "non monotonically increasing dts"), since any stream-copy just carries
+    that broken ordering through untouched.
+    mode="reencode": decodes and re-encodes instead of copying -- slower and
+    not bit-exact, but the only way to fix broken ordering, since re-encoding
+    rebuilds timestamps from scratch off the decoded frames rather than
+    reusing src's."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["ffmpeg", "-y", "-loglevel", "error"]
-    if tolerant:
+    if mode in ("tolerant", "reencode"):
         cmd += ["-err_detect", "ignore_err", "-fflags", "+genpts+discardcorrupt"]
-    cmd += ["-ss", f"{start:.3f}", "-to", f"{end:.3f}",
-            "-i", str(src), "-c", "copy", str(dest)]
+    cmd += ["-ss", f"{start:.3f}", "-to", f"{end:.3f}", "-i", str(src)]
+    cmd += ["-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac"] if mode == "reencode" else ["-c", "copy"]
+    cmd += [str(dest)]
     subprocess.run(cmd, check=True)
 
 
-def cut_and_verify(src: Path, start: float, end: float, dest: Path, max_attempts: int = 2) -> bool:
+def cut_and_verify(src: Path, start: float, end: float, dest: Path, max_attempts: int = 3) -> bool:
     """Cut a segment and decode-verify it while src (the raw file) is still
     around, retrying the cut from src if it fails -- ffprobe alone can miss
     corruption, and some failures are transient (an interrupted ffmpeg, a
-    disk hiccup) rather than corruption actually in src. The retry uses
-    tolerant flags (see cut_segment) since a plain identical retry can't fix
-    a deterministic issue like broken source timestamps -- it would just
-    reproduce the same failure. Only gives up (and deletes dest) once even
-    the tolerant retry fails, which means the corruption is really
+    disk hiccup) rather than corruption actually in src. Each retry escalates
+    through CUT_MODES (copy -> tolerant -> reencode) since a plain identical
+    retry can't fix a deterministic issue like broken source timestamps -- it
+    would just reproduce the same failure. Only gives up (and deletes dest)
+    once even the last mode fails, which means the corruption is really
     unrecoverable in src at that byte range, not the cut itself."""
     for attempt in range(1, max_attempts + 1):
-        cut_segment(src, start, end, dest, tolerant=(attempt > 1))
+        mode = CUT_MODES[min(attempt - 1, len(CUT_MODES) - 1)]
+        cut_segment(src, start, end, dest, mode=mode)
         err = decode_check(dest)
         if err is None:
             return True
         log_event({
             "event": "cut_retry" if attempt < max_attempts else "clip_corrupted",
-            "clip": str(dest), "attempt": attempt, "error": err.splitlines()[0],
+            "clip": str(dest), "attempt": attempt, "mode": mode, "error": err.splitlines()[0],
         })
     dest.unlink(missing_ok=True)
     return False

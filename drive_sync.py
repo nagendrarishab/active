@@ -20,14 +20,14 @@ video, just without an unzip in front of it. Already-processed videos are
 tracked via processing_log.jsonl's "video_done" events, same resumability
 model run_pipeline.py uses for zips.
 
-upload_merged_files() pushes every file in ./active (merge_active's
-30-minute output) to DEST_FOLDER, renamed to continue the active_part_NNN
-numbering already present there -- merge_active always restarts its own
-local numbering at active_part_000.mp4 each run, so uploading under the
-local name as-is would silently overwrite whatever ended up there last
-time. rclone copyto hash-verifies the transfer before returning; only on
-success is the local file deleted, matching the "verify before delete"
-rule the rest of the pipeline uses for raw files and clips.
+upload_merged_files() pushes every not-yet-uploaded file in ./active
+(merge_active's 30-minute output, which is no longer deleted after upload --
+kept as a local copy) to DEST_FOLDER, renamed to continue the
+active_part_NNN numbering already present there. rclone copyto hash-verifies
+the transfer before returning; on success it's logged as "upload_verified",
+which is what determines "not-yet-uploaded" on the next run -- since the
+local file sticks around, presence-on-disk can't be used for that the way
+it is for raw videos.
 """
 import json
 import os
@@ -122,10 +122,26 @@ def _next_dest_index():
     return max(indices, default=-1) + 1
 
 
+def _already_uploaded_files():
+    done = set()
+    if not rp.LOG_PATH.exists():
+        return done
+    with rp.LOG_PATH.open() as f:
+        for line in f:
+            try:
+                d = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if d.get("event") == "upload_verified":
+                done.add(d["file"])
+    return done
+
+
 def upload_merged_files():
-    parts = sorted(ma.MERGED_DIR.glob("*.mp4"))
+    done = _already_uploaded_files()
+    parts = [p for p in sorted(ma.MERGED_DIR.glob("*.mp4")) if str(p) not in done]
     if not parts:
-        print("nothing in ./active to upload")
+        print("nothing new in ./active to upload")
         return
 
     next_index = _next_dest_index()
@@ -138,7 +154,6 @@ def upload_merged_files():
             check=True,
         )
         pf.log_event({"event": "upload_verified", "file": str(part), "dest_name": dest_name})
-        part.unlink()
 
 
 if __name__ == "__main__":

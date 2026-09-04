@@ -39,11 +39,26 @@ def sort_key(path: Path):
     return base_dt.timestamp() + start_offset
 
 
+PART_RE = re.compile(r"^active_part_(\d+)\.mp4$")
+
+
+def next_local_index():
+    """Merged files in ./active are no longer deleted after upload, so a
+    fresh run must continue the numbering rather than restart at 000 --
+    otherwise ffmpeg's segment muxer would silently overwrite whatever from
+    a previous run is still sitting there."""
+    indices = [int(m.group(1)) for p in MERGED_DIR.glob("active_part_*.mp4")
+               if (m := PART_RE.match(p.name))]
+    return max(indices, default=-1) + 1
+
+
 def main():
+    """Returns the list of newly created merged part paths (empty if there
+    was nothing in ./active_tmp to merge)."""
     clips = sorted(ACTIVE_DIR.glob("*.mp4"), key=sort_key)
     if not clips:
-        print("No clips found in ./active")
-        return
+        print("No clips found in ./active_tmp")
+        return []
 
     print(f"Merging {len(clips)} clips in chronological order...")
     MERGED_DIR.mkdir(exist_ok=True)
@@ -54,18 +69,22 @@ def main():
             escaped = str(clip.resolve()).replace("'", "'\\''")
             f.write(f"file '{escaped}'\n")
 
+    start_index = next_local_index()
     out_pattern = str(MERGED_DIR / "active_part_%03d.mp4")
     subprocess.run(
         ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list),
          "-c", "copy", "-map", "0",
-         "-f", "segment", "-segment_time", str(CHUNK_SEC), "-reset_timestamps", "1",
+         "-f", "segment", "-segment_time", str(CHUNK_SEC),
+         "-segment_start_number", str(start_index), "-reset_timestamps", "1",
          out_pattern],
         check=True,
     )
     concat_list.unlink()
 
-    parts = sorted(MERGED_DIR.glob("active_part_*.mp4"))
-    print(f"Wrote {len(parts)} merged {CHUNK_SEC // 60}-minute files to {MERGED_DIR}")
+    new_parts = [p for p in sorted(MERGED_DIR.glob("active_part_*.mp4"))
+                 if (m := PART_RE.match(p.name)) and int(m.group(1)) >= start_index]
+    print(f"Wrote {len(new_parts)} merged {CHUNK_SEC // 60}-minute files to {MERGED_DIR}")
+    return new_parts
 
 
 if __name__ == "__main__":

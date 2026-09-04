@@ -89,22 +89,24 @@ def merge_and_verify():
     and by automate.py, which drives this same tail end after downloading
     and processing raw videos directly instead of zips."""
     print("merging active_tmp -> active ...")
-    ma.main()
+    new_parts = ma.main()
 
     if not ma.ACTIVE_DIR.exists():
         # Nothing was ever cut into active_tmp this run (e.g. every source
         # video failed before producing a clip) -- nothing to merge or clean up.
         return
 
-    merged_parts = sorted(ma.MERGED_DIR.glob("active_part_*.mp4"))
-    bad = verify_new_clips(merged_parts)
+    # Only decode-verify what this run actually produced -- older parts from
+    # a previous run are still sitting in ./active (no longer deleted after
+    # upload) and were already verified when they were created.
+    bad = verify_new_clips(new_parts)
     if bad:
         print(f"WARNING: {len(bad)} merged file(s) failed decode-verify, NOT deleting active_tmp:")
         for b in bad:
             print(f"  BAD: {b}")
         return
 
-    print(f"merged output verified clean ({len(merged_parts)} files), removing {ma.ACTIVE_DIR}")
+    print(f"merged output verified clean ({len(new_parts)} files), removing {ma.ACTIVE_DIR}")
     shutil.rmtree(ma.ACTIVE_DIR)
 
 
