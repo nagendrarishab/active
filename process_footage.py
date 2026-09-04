@@ -198,25 +198,33 @@ def samples_to_segments(samples, duration: float):
     return filtered
 
 
-def cut_segment(src: Path, start: float, end: float, dest: Path):
+def cut_segment(src: Path, start: float, end: float, dest: Path, tolerant: bool = False):
+    """tolerant=True regenerates PTS/DTS and ignores/discards corrupt packets
+    instead of trusting src's own timestamps -- the same recovery ffmpeg
+    flags try_recover() uses for a whole unreadable file, applied here to a
+    single segment whose cut failed because of broken timestamps (e.g.
+    "non monotonically increasing dts") rather than a missing video stream."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error",
-         "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
-         "-i", str(src), "-c", "copy", str(dest)],
-        check=True,
-    )
+    cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+    if tolerant:
+        cmd += ["-err_detect", "ignore_err", "-fflags", "+genpts+discardcorrupt"]
+    cmd += ["-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+            "-i", str(src), "-c", "copy", str(dest)]
+    subprocess.run(cmd, check=True)
 
 
 def cut_and_verify(src: Path, start: float, end: float, dest: Path, max_attempts: int = 2) -> bool:
     """Cut a segment and decode-verify it while src (the raw file) is still
     around, retrying the cut from src if it fails -- ffprobe alone can miss
     corruption, and some failures are transient (an interrupted ffmpeg, a
-    disk hiccup) rather than corruption actually in src. Only gives up (and
-    deletes dest) after max_attempts identical failures, which means the
-    corruption is really in src at that byte range, not the cut itself."""
+    disk hiccup) rather than corruption actually in src. The retry uses
+    tolerant flags (see cut_segment) since a plain identical retry can't fix
+    a deterministic issue like broken source timestamps -- it would just
+    reproduce the same failure. Only gives up (and deletes dest) once even
+    the tolerant retry fails, which means the corruption is really
+    unrecoverable in src at that byte range, not the cut itself."""
     for attempt in range(1, max_attempts + 1):
-        cut_segment(src, start, end, dest)
+        cut_segment(src, start, end, dest, tolerant=(attempt > 1))
         err = decode_check(dest)
         if err is None:
             return True

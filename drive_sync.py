@@ -65,11 +65,10 @@ def _already_processed_videos():
 
 
 def download_and_process_new_videos():
-    """Download anything new, then (re)process anything sitting in ./raw
-    that isn't marked video_done yet -- including a video downloaded on a
-    prior run that crashed before it could be processed (e.g. a missing
-    ffmpeg/ffprobe), which would otherwise sit there forever silently
-    skipped since it already exists locally."""
+    """Download every new video first, then run OpenCV motion-detect/cut on
+    each one. A video already sitting in ./raw from a prior run that
+    crashed before finishing (e.g. a missing ffmpeg) is reprocessed without
+    being re-downloaded."""
     done = _already_processed_videos()
     out = subprocess.run(
         ["rclone", "lsjson", f"{RCLONE_REMOTE}:", "--drive-root-folder-id", SOURCE_FOLDER],
@@ -105,6 +104,9 @@ def download_and_process_new_videos():
             pf.process_video(local_path)
         except Exception as exc:
             pf.log_event({"event": "video_error", "video": str(local_path), "error": str(exc)})
+
+    if not found_new:
+        print("no new videos on Drive")
 
 
 PART_RE = re.compile(r"^active_part_(\d+)\.mp4$")

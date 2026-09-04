@@ -91,6 +91,11 @@ def merge_and_verify():
     print("merging active_tmp -> active ...")
     ma.main()
 
+    if not ma.ACTIVE_DIR.exists():
+        # Nothing was ever cut into active_tmp this run (e.g. every source
+        # video failed before producing a clip) -- nothing to merge or clean up.
+        return
+
     merged_parts = sorted(ma.MERGED_DIR.glob("active_part_*.mp4"))
     bad = verify_new_clips(merged_parts)
     if bad:
