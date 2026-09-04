@@ -83,6 +83,26 @@ def process_one_zip(zip_path: Path, delete_zip: bool):
         pf.log_event({"event": "zip_deleted", "zip": str(zip_path)})
 
 
+def merge_and_verify():
+    """Merge ./active_tmp into fixed-length files in ./active, decode-verify
+    the merged output, and only then delete ./active_tmp. Shared by main()
+    and by automate.py, which drives this same tail end after downloading
+    and processing raw videos directly instead of zips."""
+    print("merging active_tmp -> active ...")
+    ma.main()
+
+    merged_parts = sorted(ma.MERGED_DIR.glob("active_part_*.mp4"))
+    bad = verify_new_clips(merged_parts)
+    if bad:
+        print(f"WARNING: {len(bad)} merged file(s) failed decode-verify, NOT deleting active_tmp:")
+        for b in bad:
+            print(f"  BAD: {b}")
+        return
+
+    print(f"merged output verified clean ({len(merged_parts)} files), removing {ma.ACTIVE_DIR}")
+    shutil.rmtree(ma.ACTIVE_DIR)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("zips", nargs="*", help="Zip files to process")
@@ -110,19 +130,8 @@ def main():
         print("skipping merge (--skip-merge)")
         return
 
-    print("all zips done, merging active_tmp -> active ...")
-    ma.main()
-
-    merged_parts = sorted(ma.MERGED_DIR.glob("active_part_*.mp4"))
-    bad = verify_new_clips(merged_parts)
-    if bad:
-        print(f"WARNING: {len(bad)} merged file(s) failed decode-verify, NOT deleting active_tmp:")
-        for b in bad:
-            print(f"  BAD: {b}")
-        return
-
-    print(f"merged output verified clean ({len(merged_parts)} files), removing {ma.ACTIVE_DIR}")
-    shutil.rmtree(ma.ACTIVE_DIR)
+    print("all zips done, ", end="")
+    merge_and_verify()
 
 
 if __name__ == "__main__":
