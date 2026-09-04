@@ -65,6 +65,11 @@ def _already_processed_videos():
 
 
 def download_and_process_new_videos():
+    """Download anything new, then (re)process anything sitting in ./raw
+    that isn't marked video_done yet -- including a video downloaded on a
+    prior run that crashed before it could be processed (e.g. a missing
+    ffmpeg/ffprobe), which would otherwise sit there forever silently
+    skipped since it already exists locally."""
     done = _already_processed_videos()
     out = subprocess.run(
         ["rclone", "lsjson", f"{RCLONE_REMOTE}:", "--drive-root-folder-id", SOURCE_FOLDER],
@@ -73,30 +78,33 @@ def download_and_process_new_videos():
     entries = json.loads(out.stdout)
 
     pf.RAW_DIR.mkdir(parents=True, exist_ok=True)
-    found_new = False
+    to_process = []
     for e in entries:
         if e.get("IsDir") or not e["Name"].endswith(".mp4"):
             continue
         local_path = pf.RAW_DIR / e["Name"]
-        if str(local_path) in done or local_path.exists():
+        if str(local_path) in done:
             continue
-        found_new = True
+        if not local_path.exists():
+            print(f"downloading: {e['Name']}")
+            subprocess.run(
+                ["rclone", "copyto", f"{RCLONE_REMOTE}:{e['Name']}", str(local_path),
+                 "--drive-root-folder-id", SOURCE_FOLDER],
+                check=True,
+            )
+            pf.log_event({"event": "video_downloaded", "video": str(local_path)})
+        to_process.append(local_path)
 
-        print(f"downloading: {e['Name']}")
-        subprocess.run(
-            ["rclone", "copyto", f"{RCLONE_REMOTE}:{e['Name']}", str(local_path),
-             "--drive-root-folder-id", SOURCE_FOLDER],
-            check=True,
-        )
-        pf.log_event({"event": "video_downloaded", "video": str(local_path)})
+    if not to_process:
+        print("no new videos on Drive")
+        return
+
+    for local_path in to_process:
         try:
             pf.log_event({"event": "video_start", "video": str(local_path)})
             pf.process_video(local_path)
         except Exception as exc:
             pf.log_event({"event": "video_error", "video": str(local_path), "error": str(exc)})
-
-    if not found_new:
-        print("no new videos on Drive")
 
 
 PART_RE = re.compile(r"^active_part_(\d+)\.mp4$")
