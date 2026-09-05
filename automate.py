@@ -13,6 +13,7 @@ Usage:
     ./automate.py
 """
 import drive_sync as ds
+import export_report as er
 import run_pipeline as rp
 
 
@@ -34,6 +35,9 @@ def main():
 
     print("=== uploading merged output to Drive ===")
     ds.upload_merged_files()
+
+    print("=== syncing report.xlsx ===")
+    er.main()
 
 
 if __name__ == "__main__":
