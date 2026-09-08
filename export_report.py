@@ -19,8 +19,10 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
+import sync_sheets
+
 ROOT = Path(__file__).resolve().parent
-LOG_PATH = ROOT / "processing_log 1.jsonl"
+LOG_PATH = ROOT / "processing_log.jsonl"
 EXCEL_PATH = ROOT / "report.xlsx"
 SHEET_NAME = "Videos"
 
@@ -32,10 +34,10 @@ DATE_TIME_RE = re.compile(
 )
 
 DATA_COLUMNS = [
-    "video", "duration_sec", "active_segments", "idle_segments",
-    "active_time_sec", "idle_time_sec", "corrupted_segments",
+    "Video", "Duration_sec", "Active_Segments", "Idle_segments",
+    "Active_time_sec", "Idle_time_sec", "Corrupted_segments",
 ]
-COLUMNS = ["date", "time"] + DATA_COLUMNS
+COLUMNS = ["Date", "Time"] + DATA_COLUMNS
 
 
 def parse_video_date_time(video_path: str):
@@ -72,11 +74,13 @@ def load_or_create_sheet():
 
 
 def existing_videos(ws):
-    header = [c.value for c in ws[1]]
+    header = [str(c.value).strip().lower() if c.value is not None else "" for c in ws[1]]
+    if "video" not in header:
+        return set()
     col = header.index("video")
     videos = set()
     for row in ws.iter_rows(min_row=2, values_only=True):
-        if row[col]:
+        if col < len(row) and row[col]:
             videos.add(row[col])
     return videos
 
@@ -86,12 +90,13 @@ def video_done_events():
         return
     with LOG_PATH.open() as f:
         for line in f:
-            try:
-                d = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if d.get("event") == "video_done":
-                yield d
+            for chunk in line.replace("}{", "}\n{").splitlines():
+                try:
+                    d = json.loads(chunk)
+                except json.JSONDecodeError:
+                    continue
+                if d.get("event") == "video_done":
+                    yield d
 
 
 def main():
@@ -99,19 +104,25 @@ def main():
     done = existing_videos(ws)
 
     added = 0
+    new_rows = []
     for event in video_done_events():
         video_name = Path(event["video"]).name
         if video_name in done:
             continue
         video_date, video_time = parse_video_date_time(event["video"])
-        row = [video_date, video_time, video_name] + [event.get(col) for col in DATA_COLUMNS[1:]]
+        row = [video_date, video_time, video_name] + [
+            event.get(col) if col in event else event.get(col.lower())
+            for col in DATA_COLUMNS[1:]
+        ]
         ws.append(row)
+        new_rows.append(row)
         done.add(video_name)
         added += 1
 
     if added:
         wb.save(EXCEL_PATH)
         print(f"added {added} new row(s) to {EXCEL_PATH}")
+        sync_sheets.send_to_webhook(new_rows)
     else:
         print(f"no new video_done events since last sync ({EXCEL_PATH} unchanged)")
 

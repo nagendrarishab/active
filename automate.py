@@ -10,7 +10,7 @@ already resumes from processing_log.jsonl or from what's still on disk, so
 a re-run just picks up where the last one left off.
 
 Usage:
-    ./automate.py
+    python automate.py
 """
 import drive_sync as ds
 import export_report as er
@@ -36,7 +36,7 @@ def main():
     print("=== uploading merged output to Drive ===")
     ds.upload_merged_files()
 
-    print("=== syncing report.xlsx ===")
+    print("=== syncing report.xlsx & Google Sheets ===")
     er.main()
 
 

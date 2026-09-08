@@ -8,15 +8,24 @@ Filenames look like: <base>_segNNN_<start>-<end>.mp4, where <base> is either
 and <start> is the offset in seconds into that base recording. Chronological
 order = base timestamp + start offset.
 """
+import json
+import os
 import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parent
+load_dotenv(ROOT / ".env")
+
 ACTIVE_DIR = ROOT / "active_tmp"
 MERGED_DIR = ROOT / "active"
 CHUNK_SEC = 1800  # 30 minutes
+
+RCLONE_REMOTE = os.environ["RCLONE_REMOTE"]
+DEST_FOLDER = os.environ["DEST_FOLDER"]
 
 NAME_RE = re.compile(
     r"^(?P<base>Camera_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}|cam-\d{8}-\d{6})"
@@ -43,12 +52,21 @@ PART_RE = re.compile(r"^active_part_(\d+)\.mp4$")
 
 
 def next_local_index():
-    """Merged files in ./active are no longer deleted after upload, so a
-    fresh run must continue the numbering rather than restart at 000 --
-    otherwise ffmpeg's segment muxer would silently overwrite whatever from
-    a previous run is still sitting there."""
-    indices = [int(m.group(1)) for p in MERGED_DIR.glob("active_part_*.mp4")
-               if (m := PART_RE.match(p.name))]
+    """Check Drive for the highest active_part_NNN.mp4 already uploaded
+    and return the next consecutive index to use for new merged files."""
+    try:
+        out = subprocess.run(
+            ["rclone", "lsjson", f"{RCLONE_REMOTE}:", "--drive-root-folder-id", DEST_FOLDER],
+            capture_output=True, text=True, check=True,
+        )
+        entries = json.loads(out.stdout)
+        indices = [int(m.group(1)) for e in entries if (m := PART_RE.match(e["Name"]))]
+    except Exception as exc:
+        print(f"Notice: Drive folder check encountered: {exc}")
+        indices = []
+    # Also check any local files not yet uploaded
+    indices += [int(m.group(1)) for p in MERGED_DIR.glob("active_part_*.mp4")
+                if (m := PART_RE.match(p.name))]
     return max(indices, default=-1) + 1
 
 

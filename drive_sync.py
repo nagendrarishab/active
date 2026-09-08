@@ -21,17 +21,15 @@ tracked via processing_log.jsonl's "video_done" events, same resumability
 model run_pipeline.py uses for zips.
 
 upload_merged_files() pushes every not-yet-uploaded file in ./active
-(merge_active's 30-minute output, which is no longer deleted after upload --
-kept as a local copy) to DEST_FOLDER, renamed to continue the
-active_part_NNN numbering already present there. rclone copyto hash-verifies
-the transfer before returning; on success it's logged as "upload_verified",
-which is what determines "not-yet-uploaded" on the next run -- since the
-local file sticks around, presence-on-disk can't be used for that the way
-it is for raw videos.
+(merge_active's 30-minute output) to DEST_FOLDER, renamed to continue the
+active_part_NNN numbering. rclone copyto hash-verifies the transfer before
+returning; on success it is logged as "upload_verified" and the local file
+is deleted immediately to free up disk space.
 """
 import json
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -55,12 +53,13 @@ def _already_processed_videos():
         return done
     with rp.LOG_PATH.open() as f:
         for line in f:
-            try:
-                d = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if d.get("event") == "video_done":
-                done.add(d["video"])
+            for chunk in line.replace("}{", "}\n{").splitlines():
+                try:
+                    d = json.loads(chunk)
+                except json.JSONDecodeError:
+                    continue
+                if d.get("event") == "video_done":
+                    done.add(d["video"])
     return done
 
 
@@ -113,33 +112,24 @@ PART_RE = re.compile(r"^active_part_(\d+)\.mp4$")
 
 
 def _next_dest_index():
-    out = subprocess.run(
-        ["rclone", "lsjson", f"{RCLONE_REMOTE}:", "--drive-root-folder-id", DEST_FOLDER],
-        capture_output=True, text=True, check=True,
-    )
-    entries = json.loads(out.stdout)
-    indices = [int(m.group(1)) for e in entries if (m := PART_RE.match(e["Name"]))]
+    """Query Drive to find the highest active_part_NNN.mp4 index already there."""
+    try:
+        out = subprocess.run(
+            ["rclone", "lsjson", f"{RCLONE_REMOTE}:", "--drive-root-folder-id", DEST_FOLDER],
+            capture_output=True, text=True, check=True,
+        )
+        entries = json.loads(out.stdout)
+        indices = [int(m.group(1)) for e in entries if (m := PART_RE.match(e["Name"]))]
+    except Exception as exc:
+        print(f"Notice: Drive folder check encountered: {exc}")
+        indices = []
     return max(indices, default=-1) + 1
 
 
-def _already_uploaded_files():
-    done = set()
-    if not rp.LOG_PATH.exists():
-        return done
-    with rp.LOG_PATH.open() as f:
-        for line in f:
-            try:
-                d = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if d.get("event") == "upload_verified":
-                done.add(d["file"])
-    return done
-
-
 def upload_merged_files():
-    done = _already_uploaded_files()
-    parts = [p for p in sorted(ma.MERGED_DIR.glob("*.mp4")) if str(p) not in done]
+    # Files still present in ./active/ are the ones not yet uploaded --
+    # anything already uploaded was deleted (part.unlink()) right after.
+    parts = sorted(ma.MERGED_DIR.glob("*.mp4"))
     if not parts:
         print("nothing new in ./active to upload")
         return
@@ -153,7 +143,23 @@ def upload_merged_files():
              "--drive-root-folder-id", DEST_FOLDER],
             check=True,
         )
-        pf.log_event({"event": "upload_verified", "file": str(part), "dest_name": dest_name})
+        part.unlink()
+        print(f"deleted local: {part.name}")
+
+    # All uploads verified successfully -- clean up intermediate clip directories.
+    # active_tmp (motion clips that were merged): may already be gone from merge_and_verify(),
+    # but clean up if still present (e.g. merge verify failed earlier but uploads still ran).
+    if ma.ACTIVE_DIR.exists() and any(ma.ACTIVE_DIR.iterdir()):
+        shutil.rmtree(ma.ACTIVE_DIR)
+        ma.ACTIVE_DIR.mkdir()   # re-create empty so downstream globs never error
+        print(f"cleaned: {ma.ACTIVE_DIR.name}/")
+
+    # idle (non-motion clips from the same source videos, no longer needed once
+    # the active footage is safely on Drive).
+    if pf.IDLE_DIR.exists() and any(f for f in pf.IDLE_DIR.iterdir() if f.suffix == ".mp4"):
+        for clip in list(pf.IDLE_DIR.glob("*.mp4")):
+            clip.unlink()
+        print(f"cleaned: {pf.IDLE_DIR.name}/ ({sum(1 for _ in pf.IDLE_DIR.glob('*'))} non-mp4 files kept)")
 
 
 if __name__ == "__main__":
