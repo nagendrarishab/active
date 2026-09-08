@@ -7,6 +7,13 @@ Usage:
     # Sync all missing rows from report.xlsx to Google Sheet:
     python sync_sheets.py --all
 
+    # Pull the Sheet's current state back down into report.xlsx: updates any
+    # local row whose values differ from the Sheet (e.g. someone corrected a
+    # value directly in the Sheet), and adds any row that exists in the
+    # Sheet but not locally. Never blanks out a local value just because a
+    # Sheet cell happens to be empty. Safe to run anytime:
+    python sync_sheets.py --pull
+
     # Test connection and view current sheet status:
     python sync_sheets.py --test
 """
@@ -22,7 +29,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -30,6 +37,10 @@ load_dotenv(ROOT / ".env")
 RCLONE_CONF_PATH = Path("~/.config/rclone/rclone.conf").expanduser()
 EXCEL_PATH = ROOT / "report.xlsx"
 DEFAULT_SHEET_TAB = "Videos"
+COLUMNS = [
+    "Date", "Time", "Video", "Duration_sec", "Active_Segments",
+    "Idle_segments", "Active_time_sec", "Idle_time_sec", "Corrupted_segments",
+]
 
 
 def get_access_token():
@@ -181,6 +192,126 @@ def sync_all_from_excel():
     send_to_webhook(rows)
 
 
+def get_all_rows_from_sheet(sheet_id, tab_name, access_token):
+    """Reads every row (including the header) from the Sheet as displayed
+    strings -- default valueRenderOption (FORMATTED_VALUE) sidesteps having
+    to deal with Sheets' internal date serial-number representation."""
+    range_name = urllib.parse.quote(f"{tab_name}!A:Z")
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range_name}"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {access_token}"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        return data.get("values", [])
+
+
+def _deserialize_cell(col_name, value):
+    """Best-effort inverse of serialize_cell() for a value pulled down from
+    the Sheet, so it matches the type a normally-generated row would have
+    (a real date/time/number, not just a display string). Returns None for
+    a blank cell -- the caller treats that as "no opinion", never as an
+    instruction to blank out an existing local value."""
+    if value in (None, ""):
+        return None
+    if col_name == "Date":
+        try:
+            # openpyxl always reads a date-formatted cell back as a full
+            # datetime (midnight), even though a plain date was written --
+            # match that shape here or every row would look "changed".
+            return datetime.combine(date.fromisoformat(value), time())
+        except ValueError:
+            return value
+    if col_name == "Time":
+        try:
+            return time.fromisoformat(value)
+        except ValueError:
+            return value
+    if col_name == "Video":
+        return value
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            return float(value)
+        except ValueError:
+            return value
+
+
+def pull_from_sheet():
+    """Pulls the Sheet's current state down into report.xlsx: updates any
+    existing local row whose Sheet counterpart has different (non-blank)
+    values -- e.g. someone corrected a number directly in the Sheet -- and
+    appends any row present in the Sheet but missing locally. Matched by
+    video name. A blank Sheet cell is never treated as "clear this locally",
+    only a genuinely different value triggers an update."""
+    sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
+    tab_name = os.environ.get("GOOGLE_SHEET_TAB", DEFAULT_SHEET_TAB).strip()
+    if not sheet_id:
+        print("GOOGLE_SHEET_ID is not set in .env")
+        return
+
+    access_token = get_access_token()
+    sheet_rows = get_all_rows_from_sheet(sheet_id, tab_name, access_token)
+    if not sheet_rows:
+        print("[Google Sheets Pull] Sheet is empty, nothing to pull.")
+        return
+
+    header = sheet_rows[0]
+    video_col = header.index("Video") if "Video" in header else 2
+
+    sheet_by_video = {}
+    for sheet_row in sheet_rows[1:]:
+        video_name = sheet_row[video_col].strip() if video_col < len(sheet_row) else ""
+        if video_name:
+            sheet_by_video[video_name] = {
+                header[i]: sheet_row[i] for i in range(len(header)) if i < len(sheet_row)
+            }
+
+    if EXCEL_PATH.exists():
+        wb = load_workbook(EXCEL_PATH)
+        ws = wb[DEFAULT_SHEET_TAB] if DEFAULT_SHEET_TAB in wb.sheetnames else wb.active
+    else:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = DEFAULT_SHEET_TAB
+        ws.append(COLUMNS)
+
+    local_header = [c.value for c in ws[1]]
+    local_video_col = local_header.index("Video") if "Video" in local_header else 2
+
+    updated = 0
+    seen_locally = set()
+    for row_cells in ws.iter_rows(min_row=2):
+        video_name = row_cells[local_video_col].value
+        if not video_name:
+            continue
+        seen_locally.add(video_name)
+        by_name = sheet_by_video.get(video_name)
+        if not by_name:
+            continue
+        row_changed = False
+        for col_idx, col_name in enumerate(local_header):
+            new_val = _deserialize_cell(col_name, by_name.get(col_name, ""))
+            if new_val is not None and row_cells[col_idx].value != new_val:
+                row_cells[col_idx].value = new_val
+                row_changed = True
+        if row_changed:
+            updated += 1
+
+    added = 0
+    for video_name, by_name in sheet_by_video.items():
+        if video_name in seen_locally:
+            continue
+        row = [_deserialize_cell(col, by_name.get(col, "")) for col in local_header]
+        ws.append(row)
+        added += 1
+
+    if added or updated:
+        wb.save(EXCEL_PATH)
+        print(f"[Google Sheets Pull] Updated {updated} row(s), added {added} new row(s) in {EXCEL_PATH.name}")
+    else:
+        print(f"[Google Sheets Pull] {EXCEL_PATH.name} already matches the Sheet.")
+
+
 def test_connection():
     load_dotenv(ROOT / ".env")
     sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
@@ -211,11 +342,14 @@ def test_connection():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sync report to Google Sheet")
     parser.add_argument("--all", action="store_true", help="Sync all rows from report.xlsx to Google Sheet")
+    parser.add_argument("--pull", action="store_true", help="Pull the Sheet's current state down into report.xlsx")
     parser.add_argument("--test", action="store_true", help="Test Google Sheet API connection")
     args = parser.parse_args()
 
     if args.all:
         sync_all_from_excel()
+    elif args.pull:
+        pull_from_sheet()
     elif args.test:
         test_connection()
     else:
