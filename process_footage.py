@@ -262,9 +262,12 @@ def cut_and_verify(src: Path, start: float, end: float, dest: Path, max_attempts
     return False
 
 
-def process_video(video_path: Path):
+def process_video(video_path: Path, source: str = "manual"):
     """Returns the list of active/idle clip paths this video produced (empty
-    if the source was unrecoverably corrupted)."""
+    if the source was unrecoverably corrupted). `source` labels which source
+    folder the video came from (see drive_sync.SOURCES) so its clips land in
+    their own ACTIVE_DIR/<source> and IDLE_DIR/<source> subtree -- keeping
+    footage from different source folders from ever being merged together."""
     stem = video_path.stem
     source = video_path
     recovered = None
@@ -291,7 +294,7 @@ def process_video(video_path: Path):
     active_time = idle_time = 0.0
     for i, (start, end, is_motion) in enumerate(segments):
         out_dir = ACTIVE_DIR if is_motion else IDLE_DIR
-        dest = out_dir / f"{stem}_seg{i:03d}_{start:.1f}-{end:.1f}.mp4"
+        dest = out_dir / source / f"{stem}_seg{i:03d}_{start:.1f}-{end:.1f}.mp4"
         if not cut_and_verify(source, start, end, dest):
             corrupted_count += 1
             continue  # unrecoverable even after a retry from source -- already logged
@@ -306,6 +309,7 @@ def process_video(video_path: Path):
     log_event({
         "event": "video_done",
         "video": str(video_path),
+        "source": source,
         "duration_sec": duration,
         "active_segments": active_count,
         "idle_segments": idle_count,
@@ -320,7 +324,7 @@ def process_video(video_path: Path):
     return created
 
 
-def process_zip(zip_path: Path):
+def process_zip(zip_path: Path, source: str = "manual"):
     """Returns the list of active/idle clip paths produced from this zip."""
     extract_dir = RAW_DIR / zip_path.stem
     extract_dir.mkdir(parents=True, exist_ok=True)
@@ -333,7 +337,7 @@ def process_zip(zip_path: Path):
     for video_path in sorted(extract_dir.rglob("*.mp4")):
         try:
             log_event({"event": "video_start", "video": str(video_path)})
-            created.extend(process_video(video_path))
+            created.extend(process_video(video_path, source=source))
         except Exception as e:
             log_event({"event": "video_error", "video": str(video_path), "error": str(e)})
 
