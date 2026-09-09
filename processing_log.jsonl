@@ -908,7 +908,8 @@
 {"event": "video_done", "video": "/private/tmp/claude-502/-Users-shubham-kumar-projects-ml-video-processing/b03c5f3c-b87f-4a24-9889-18cd7f85f324/scratchpad/refix/Camera_2026-08-27_17-13-48.mp4", "duration_sec": 62.0, "active_segments": 3, "idle_segments": 2, "active_time_sec": 53.0, "idle_time_sec": 9.0, "recovered": false, "ts": 1787893100.76261, "corrupted_segments": 0}
 {"event": "video_done", "video": "/private/tmp/claude-502/-Users-shubham-kumar-projects-ml-video-processing/b03c5f3c-b87f-4a24-9889-18cd7f85f324/scratchpad/refix/Camera_2026-08-26_11-57-20.mp4", "duration_sec": 416.333333, "active_segments": 8, "idle_segments": 7, "active_time_sec": 96.33333299999998, "idle_time_sec": 320.0, "recovered": false, "ts": 1787893213.613874, "corrupted_segments": 0}
 {"event": "video_done", "video": "/private/tmp/claude-502/-Users-shubham-kumar-projects-ml-video-processing/b03c5f3c-b87f-4a24-9889-18cd7f85f324/scratchpad/refix/Camera_2026-08-26_12-01-08.mp4", "duration_sec": 445.233333, "active_segments": 16, "idle_segments": 10, "active_time_sec": 407.233333, "idle_time_sec": 38.0, "recovered": false, "ts": 1787893232.1505458, "corrupted_segments": 0}
-{"event": "video_done", "video": "/private/tmp/claude-502/-Users-shubham-kumar-projects-ml-video-processing/b03c5f3c-b87f-4a24-9889-18cd7f85f324/scratchpad/refix/Camera_2026-08-26_16-10-46.mp4", "duration_sec": 450.433333, "active_segments": 34, "idle_segments": 27, "active_time_sec": 257.433333, "idle_time_sec": 193.0, "recovered": false, "ts": 1787893253.709253}{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-04_08-45-00.mp4", "ts": 1788520137.8001542}
+{"event": "video_done", "video": "/private/tmp/claude-502/-Users-shubham-kumar-projects-ml-video-processing/b03c5f3c-b87f-4a24-9889-18cd7f85f324/scratchpad/refix/Camera_2026-08-26_16-10-46.mp4", "duration_sec": 450.433333, "active_segments": 34, "idle_segments": 27, "active_time_sec": 257.433333, "idle_time_sec": 193.0, "recovered": false, "ts": 1787893253.709253}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-04_08-45-00.mp4", "ts": 1788520137.8001542}
 {"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-04_08-45-00.mp4", "duration_sec": 900.0, "active_segments": 1, "idle_segments": 1, "active_time_sec": 2.0, "idle_time_sec": 898.0, "corrupted_segments": 0, "recovered": false, "ts": 1788520159.847848}
 {"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-04_09-00-03.mp4", "ts": 1788520216.85503}
 {"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-04_09-00-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788520238.714751}
@@ -1143,7 +1144,8 @@
 {"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-06_17-45-03.mp4", "ts": 1788702042.303948}
 {"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-06_17-45-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788702064.0501819}
 {"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-06_18-00-02.mp4", "ts": 1788702109.838188}
-{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-06_18-00-02.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788702131.6252081}{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-07_08-45-00.mp4", "ts": 1788761510.855891}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-06_18-00-02.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788702131.6252081}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-07_08-45-00.mp4", "ts": 1788761510.855891}
 {"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-07_08-45-00.mp4", "duration_sec": 900.0, "active_segments": 1, "idle_segments": 1, "active_time_sec": 2.0, "idle_time_sec": 898.0, "corrupted_segments": 0, "recovered": false, "ts": 1788761533.199444}
 {"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-07_09-00-02.mp4", "ts": 1788761579.916225}
 {"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-07_09-00-02.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788761602.0924091}
@@ -1303,3 +1305,68 @@
 {"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-08_18-15-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788878619.201345}
 {"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-08_18-30-03.mp4", "ts": 1788878682.073528}
 {"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-08_18-30-03.mp4", "duration_sec": 896.033333, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 896.033333, "corrupted_segments": 0, "recovered": false, "ts": 1788878717.679457}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_08-45-00.mp4", "ts": 1788935594.435949}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_08-45-00.mp4", "duration_sec": 900.0, "active_segments": 1, "idle_segments": 1, "active_time_sec": 2.0, "idle_time_sec": 898.0, "corrupted_segments": 0, "recovered": false, "ts": 1788935625.736932}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-00-03.mp4", "ts": 1788935685.9719198}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-00-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788935714.380404}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-15-03.mp4", "ts": 1788935776.486203}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-15-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788935804.70453}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-30-03.mp4", "ts": 1788935865.1168058}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-30-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788935893.429694}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-45-03.mp4", "ts": 1788935953.3492181}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-45-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788935981.7314408}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-00-02.mp4", "ts": 1788936040.8994381}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-00-02.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788936069.002547}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-15-03.mp4", "ts": 1788936131.985522}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-15-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788936160.402812}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-30-03.mp4", "ts": 1788936222.790688}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-30-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788936251.038017}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-45-03.mp4", "ts": 1788936315.323136}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-45-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788936343.765485}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-00-03.mp4", "ts": 1788936409.7860491}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-00-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788936437.9826791}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-15-03.mp4", "ts": 1788936500.553308}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-15-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788936598.292064}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-30-03.mp4", "ts": 1788936662.467979}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-30-03.mp4", "duration_sec": 900.0, "active_segments": 0, "idle_segments": 1, "active_time_sec": 0.0, "idle_time_sec": 900.0, "corrupted_segments": 0, "recovered": false, "ts": 1788936693.742033}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-00-03.mp4", "ts": 1788936944.3835788}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_09-30-00_combined.mp4", "duration_sec": 96.567, "active_segments": 49, "idle_segments": 0, "active_time_sec": 96.567, "idle_time_sec": 0.0, "corrupted_segments": 0, "recovered": false, "combined_clips": 49, "note": "combined 49 sub-30s clips from a DVR restart-loop burst", "ts": 1788938006.9699662}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-00-00_combined.mp4", "duration_sec": 403.7, "active_segments": 209, "idle_segments": 0, "active_time_sec": 403.7, "idle_time_sec": 0.0, "corrupted_segments": 0, "recovered": false, "combined_clips": 209, "note": "combined 209 sub-30s clips from a DVR restart-loop burst", "ts": 1788938868.7305532}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_10-30-00_combined.mp4", "duration_sec": 404.167, "active_segments": 209, "idle_segments": 0, "active_time_sec": 404.167, "idle_time_sec": 0.0, "corrupted_segments": 0, "recovered": false, "combined_clips": 209, "note": "combined 209 sub-30s clips from a DVR restart-loop burst", "ts": 1788939673.419274}
+{"event": "video_done", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-00-00_combined.mp4", "duration_sec": 346.467, "active_segments": 179, "idle_segments": 0, "active_time_sec": 346.467, "idle_time_sec": 0.0, "corrupted_segments": 0, "recovered": false, "combined_clips": 179, "note": "combined 179 sub-30s clips from a DVR restart-loop burst", "ts": 1788940377.466697}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-44-48.mp4", "ts": 1788940380.1847098}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-44-57.mp4", "ts": 1788940382.3350558}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-45-05.mp4", "ts": 1788940386.118749}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-45-14.mp4", "ts": 1788940388.4208798}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-45-22.mp4", "ts": 1788940391.042973}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-45-31.mp4", "ts": 1788940393.4405272}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-45-40.mp4", "ts": 1788940396.187051}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-45-48.mp4", "ts": 1788940398.927795}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-45-57.mp4", "ts": 1788940401.110614}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-46-06.mp4", "ts": 1788940403.535676}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-46-14.mp4", "ts": 1788940424.656947}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-46-23.mp4", "ts": 1788940427.290585}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-46-31.mp4", "ts": 1788940429.545634}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-46-40.mp4", "ts": 1788940432.8230069}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-46-49.mp4", "ts": 1788940435.584258}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-46-57.mp4", "ts": 1788940438.2488132}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-47-06.mp4", "ts": 1788940441.124903}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-47-15.mp4", "ts": 1788940446.860286}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_11-47-24.mp4", "ts": 1788940449.6168818}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-15-13.mp4", "ts": 1788940452.8910022}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-15-21.mp4", "ts": 1788940455.350374}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-15-29.mp4", "ts": 1788940457.908236}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-15-38.mp4", "ts": 1788940460.967284}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-15-47.mp4", "ts": 1788940463.654452}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-15-55.mp4", "ts": 1788940467.8764071}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-16-04.mp4", "ts": 1788940470.6572852}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-16-12.mp4", "ts": 1788940473.677597}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-16-21.mp4", "ts": 1788940476.242806}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-16-30.mp4", "ts": 1788940478.695223}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-16-38.mp4", "ts": 1788940481.45891}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-16-47.mp4", "ts": 1788940485.0447848}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-16-56.mp4", "ts": 1788940487.607507}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-17-05.mp4", "ts": 1788940490.323227}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-17-13.mp4", "ts": 1788940492.830731}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-17-22.mp4", "ts": 1788940495.181021}
+{"event": "video_start", "video": "/Users/shubham.kumar/Desktop/active/raw/Camera_2026-09-09_12-17-30.mp4", "ts": 1788940497.639233}
