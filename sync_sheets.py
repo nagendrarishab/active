@@ -40,6 +40,7 @@ DEFAULT_SHEET_TAB = "Videos"
 COLUMNS = [
     "Date", "Time", "Video", "Duration_sec", "Active_Segments",
     "Idle_segments", "Active_time_sec", "Idle_time_sec", "Corrupted_segments",
+    "Source",
 ]
 
 
@@ -131,7 +132,7 @@ def sync_rows_via_api(rows, sheet_id, tab_name):
         print("[Google Sheets Sync] All rows are already present in Google Sheet.")
         return True, "already up to date"
 
-    range_name = urllib.parse.quote(f"{tab_name}!A:I")
+    range_name = urllib.parse.quote(f"{tab_name}!A:J")
     url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range_name}:append?valueInputOption=USER_ENTERED"
 
     body = json.dumps({"values": to_append}).encode("utf-8")

@@ -37,7 +37,10 @@ DATA_COLUMNS = [
     "Video", "Duration_sec", "Active_Segments", "Idle_segments",
     "Active_time_sec", "Idle_time_sec", "Corrupted_segments",
 ]
-COLUMNS = ["Date", "Time"] + DATA_COLUMNS
+# Appended after DATA_COLUMNS (not inserted earlier) so existing rows written
+# before this column existed don't need to be reflowed -- they just get a
+# blank/"unknown" Source cell instead of every column shifting.
+COLUMNS = ["Date", "Time"] + DATA_COLUMNS + ["Source"]
 
 
 def parse_video_date_time(video_path: str):
@@ -113,7 +116,7 @@ def main():
         row = [video_date, video_time, video_name] + [
             event.get(col) if col in event else event.get(col.lower())
             for col in DATA_COLUMNS[1:]
-        ]
+        ] + [event.get("source", "unknown")]
         ws.append(row)
         new_rows.append(row)
         done.add(video_name)

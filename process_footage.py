@@ -269,10 +269,10 @@ def process_video(video_path: Path, source: str = "manual"):
     their own ACTIVE_DIR/<source> and IDLE_DIR/<source> subtree -- keeping
     footage from different source folders from ever being merged together."""
     stem = video_path.stem
-    source = video_path
+    input_path = video_path
     recovered = None
     try:
-        duration = ffprobe_duration(source)
+        duration = ffprobe_duration(input_path)
     except subprocess.CalledProcessError:
         recovered = try_recover(video_path)
         if recovered is None:
@@ -283,10 +283,10 @@ def process_video(video_path: Path, source: str = "manual"):
             })
             video_path.unlink()
             return []
-        source = recovered
-        duration = ffprobe_duration(source)
+        input_path = recovered
+        duration = ffprobe_duration(input_path)
 
-    samples = detect_motion_samples(source)
+    samples = detect_motion_samples(input_path)
     segments = samples_to_segments(samples, duration)
 
     created = []
@@ -295,7 +295,7 @@ def process_video(video_path: Path, source: str = "manual"):
     for i, (start, end, is_motion) in enumerate(segments):
         out_dir = ACTIVE_DIR if is_motion else IDLE_DIR
         dest = out_dir / source / f"{stem}_seg{i:03d}_{start:.1f}-{end:.1f}.mp4"
-        if not cut_and_verify(source, start, end, dest):
+        if not cut_and_verify(input_path, start, end, dest):
             corrupted_count += 1
             continue  # unrecoverable even after a retry from source -- already logged
         created.append(dest)
