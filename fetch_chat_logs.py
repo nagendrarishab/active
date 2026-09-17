@@ -5,9 +5,12 @@ automate.py) never reprocesses a day it has already synced.
 
 Progress is tracked in chat_sync_state.json:
     - last_message_time: only messages posted after this are fetched next run
-    - session_counters:  per-date session numbering (S1, S2, ...), continued
-                          across runs so today's later run picks up at the
-                          right session number instead of restarting at S1
+    - session_counters:  per-date-per-branch session numbering (S1, S2, ...),
+                          continued across runs. A "session" is a burst of
+                          activity separated by a real time gap (see
+                          parse_vault_logs.SESSION_GAP), not a Chat message
+                          boundary -- the bot can post many small messages
+                          within one continuous burst.
 
 Requires (in .env): CHAT_CLIENT_ID, CHAT_CLIENT_SECRET, VAULT_CHAT_SPACE
 Requires chat_token.json (from a one-time `python3 chat_auth_setup.py` run).
@@ -113,10 +116,10 @@ def main():
         print("[Chat Sync] No new messages since last run.")
         return
 
-    # Each Chat message is one "session" -- separate them the same way a
-    # pasted chat export does, so parse_vault_logs' existing marker-based
-    # splitting picks them up unchanged.
-    blob = ("\nVault Events Bot, App,\n").join(m.get("text", "") for m in messages)
+    # parse_vault_logs derives sessions from time gaps between events, not
+    # from Chat message boundaries (a single message doesn't correspond to
+    # one meaningful session), so these just need to be concatenated.
+    blob = "\n".join(m.get("text", "") for m in messages)
 
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tmp:
         tmp.write(blob)

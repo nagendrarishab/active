@@ -3,15 +3,16 @@
 the columns of the tray-event tracking sheet that can be derived from the logs
 alone: Date, Session, Branch, production Event count, Production Context.
 
-A "session" is one Vault Events Bot chat message -- Google Chat inserts a
-"Vault Events Bot, App, <time>" line between separate messages when you copy
-a thread, so those lines mark natural session boundaries. Everything before
-the first such marker is session 1.
+A "session" is a burst of activity for one branch with no gap longer than
+SESSION_GAP between consecutive events -- NOT one Chat message. The bot can
+post many separate tiny messages within a single continuous burst of tray
+activity, so message boundaries don't reflect anything meaningful; a real
+pause in activity does.
 
 Tray state (IDLE / TRAY_PICKED / TRAY_IN_TRANSIT / TRAY_ON_TABLE) is tracked
 globally across the whole file regardless of session, since it reflects the
-real world, not the chat's message grouping -- only event *counts* are
-bucketed per session.
+real world, not this grouping -- only event *counts* are bucketed per
+session.
 
 The remaining columns (Training data/Event count/Context, Accuracy rate, FP,
 FN) need a human to compare these logged detections against a manual review
@@ -19,21 +20,58 @@ of the footage -- the logs are the model's own output, not ground truth, so
 correctness can't be self-graded from them.
 
 Usage:
-    python3 parse_vault_logs.py <log_file> [log_file ...]           # print only
-    python3 parse_vault_logs.py <log_file> [log_file ...] --push    # also write
-                                                                     # into the
-                                                                     # Sheet1 tab
+    python3 parse_vault_logs.py <log_file> [log_file ...]                 # print only
+    python3 parse_vault_logs.py <log_file> [log_file ...] --push          # also write
+                                                                           # into Sheet1
+    python3 parse_vault_logs.py <log_file> [log_file ...] --date YYYY-MM-DD --push
+                                                                           # only that date
+    python3 parse_vault_logs.py --pull   # mirror Sheet1's current state into
+                                          # report.xlsx's "Vault Events" tab
 """
 import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
-SESSION_MARKER_RE = re.compile(r"^Vault Events Bot,\s*App,")
+CHUNK_SIZE = 300  # keep any single batch request comfortably under API size limits
+
+
+def chunked(seq, size):
+    for i in range(0, len(seq), size):
+        yield seq[i:i + size]
+
+
+def request_json(url, access_token, method="GET", body=None, max_retries=6):
+    """A thin urlopen wrapper with exponential backoff on 429/5xx -- needed
+    once row counts get into the hundreds/thousands, where even a handful of
+    calls can occasionally get rate-limited."""
+    headers = {"Authorization": f"Bearer {access_token}"}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    delay = 1
+    for attempt in range(max_retries):
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                raw = resp.read()
+                return json.loads(raw.decode("utf-8")) if raw else {}
+        except urllib.error.HTTPError as exc:
+            if exc.code in (429, 500, 503) and attempt < max_retries - 1:
+                time.sleep(delay)
+                delay = min(delay * 2, 30)
+                continue
+            raise
+
+SESSION_GAP = timedelta(minutes=5)
 STATE_RE = re.compile(
     r"\[STATE_TRANSITION\] (?P<branch>\S+) tray=(?P<tray>\S+) "
     r"old_state=(?P<old>\S+) new_state=(?P<new>\S+) @ (?P<ts>.+?) IST"
@@ -53,12 +91,17 @@ def parse_ts(ts: str) -> datetime:
 
 
 def load_events(paths, session_counters=None):
-    """session_counters: {date_iso_str: last session number used that date},
+    """session_counters: {"<date_iso>|<branch>": last session number used},
     mutated in place and also returned -- pass in the persisted state from a
     prior run to keep numbering (S8, S9, ...) continuing correctly instead of
-    restarting at S1, and to get correct per-day numbering even when a single
-    run's input spans a date rollover. Defaults to a fresh {} (manual/CLI use
-    starts each date back at S1, matching this script's original behavior)."""
+    restarting at S1. Defaults to a fresh {} (manual/CLI use starts each
+    date+branch back at S1, matching this script's original behavior).
+
+    A new session starts for a branch when: this is its first event seen,
+    the date has rolled over, or more than SESSION_GAP has passed since its
+    last event -- tracked independently per branch, since one branch's idle
+    stretch shouldn't be affected by another branch's activity interleaved
+    in the same input."""
     if session_counters is None:
         session_counters = {}
 
@@ -66,29 +109,28 @@ def load_events(paths, session_counters=None):
     detections = defaultdict(list)  # branch -> [(ts, label, session)]
     spans = defaultdict(lambda: [None, None])  # (date, branch, session) -> [min_ts, max_ts]
 
-    pending_new_session = True  # the very first chunk is also a boundary
-    current_session, current_date = None, None
+    last_ts = {}          # branch -> last event ts seen
+    current_session = {}  # branch -> current session number
 
     for path in paths:
         with open(path) as f:
             for line in f:
-                if SESSION_MARKER_RE.match(line):
-                    pending_new_session = True
-                    continue
-
                 m_any = ANY_LINE_RE.match(line)
                 if not m_any:
                     continue
                 ts = parse_ts(m_any["ts"])
+                branch = m_any["branch"]
                 date_key = ts.date().isoformat()
 
-                if pending_new_session or date_key != current_date:
-                    current_date = date_key
-                    session_counters[date_key] = session_counters.get(date_key, 0) + 1
-                    current_session = session_counters[date_key]
-                    pending_new_session = False
+                prev_ts = last_ts.get(branch)
+                if prev_ts is None or prev_ts.date() != ts.date() or (ts - prev_ts) > SESSION_GAP:
+                    counter_key = f"{date_key}|{branch}"
+                    session_counters[counter_key] = session_counters.get(counter_key, 0) + 1
+                    current_session[branch] = session_counters[counter_key]
+                last_ts[branch] = ts
+                session = current_session[branch]
 
-                key = (ts.date(), m_any["branch"], current_session)
+                key = (ts.date(), branch, session)
                 lo, hi = spans[key]
                 if lo is None or ts < lo:
                     spans[key][0] = ts
@@ -97,13 +139,11 @@ def load_events(paths, session_counters=None):
 
                 m = STATE_RE.search(line)
                 if m:
-                    states[m["branch"]].append(
-                        (parse_ts(m["ts"]), m["tray"], m["old"], m["new"], current_session)
-                    )
+                    states[branch].append((ts, m["tray"], m["old"], m["new"], session))
                     continue
                 m = DETECT_RE.search(line)
                 if m and m["label"] != "None":
-                    detections[m["branch"]].append((parse_ts(m["ts"]), m["label"], current_session))
+                    detections[branch].append((ts, m["label"], session))
 
     for branch in states:
         states[branch].sort(key=lambda r: r[0])
@@ -203,10 +243,7 @@ def col_letter(idx):
 def fetch_sheet_rows(sheet_id, tab_name, access_token):
     range_name = urllib.parse.quote(f"{tab_name}!A:N")
     url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range_name}"
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {access_token}"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-        return data.get("values", [])
+    return request_json(url, access_token).get("values", [])
 
 
 def index_existing_rows(sheet_rows):
@@ -230,68 +267,71 @@ def index_existing_rows(sheet_rows):
 
 def get_grid_id(sheet_id, tab_name, access_token):
     url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {access_token}"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    data = request_json(url, access_token)
     for s in data.get("sheets", []):
         if s["properties"]["title"] == tab_name:
             return s["properties"]["sheetId"]
     raise ValueError(f"Tab '{tab_name}' not found in spreadsheet {sheet_id}")
 
 
-def reset_number_format(sheet_id, access_token, grid_id, row_num, col_idx):
+def format_reset_request(grid_id, row_num, col_idx, num_rows=1):
     """Some rows in this sheet carry a leftover Percent format from earlier
     manual edits -- writing a plain count like 2 into one renders as "200%"
-    even though the stored value is correct. Force plain-number formatting on
-    the cell we're about to write a count into so that can't happen."""
-    body = json.dumps({"requests": [{
+    even though the stored value is correct. Building these as request dicts
+    (rather than firing one API call each) lets the caller batch hundreds of
+    them into a single batchUpdate call."""
+    return {
         "repeatCell": {
             "range": {
                 "sheetId": grid_id,
-                "startRowIndex": row_num - 1, "endRowIndex": row_num,
+                "startRowIndex": row_num - 1, "endRowIndex": row_num - 1 + num_rows,
                 "startColumnIndex": col_idx, "endColumnIndex": col_idx + 1,
             },
             "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": "0"}}},
             "fields": "userEnteredFormat.numberFormat",
         }
-    }]}).encode("utf-8")
+    }
+
+
+def apply_format_requests(sheet_id, access_token, requests):
+    """Sends `requests` (repeatCell dicts) in chunks of CHUNK_SIZE, each as
+    one batchUpdate call, instead of one HTTP call per request."""
     url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchUpdate"
-    req = urllib.request.Request(
-        url, data=body, method="POST",
-        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=30):
-        pass
+    for chunk in chunked(requests, CHUNK_SIZE):
+        request_json(url, access_token, method="POST", body={"requests": chunk})
 
 
-def sheets_update(sheet_id, tab_name, access_token, range_suffix, values):
-    range_name = urllib.parse.quote(f"{tab_name}!{range_suffix}")
-    url = (f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/"
-           f"{range_name}?valueInputOption=USER_ENTERED")
-    body = json.dumps({"values": [values]}).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body, method="PUT",
-        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=30):
-        pass
+def apply_value_updates(sheet_id, tab_name, access_token, updates):
+    """updates: list of (range_suffix, values) pairs. Sends them in chunks of
+    CHUNK_SIZE via values:batchUpdate, instead of one PUT per cell/range."""
+    if not updates:
+        return
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate"
+    for chunk in chunked(updates, CHUNK_SIZE):
+        body = {
+            "valueInputOption": "USER_ENTERED",
+            "data": [{"range": f"{tab_name}!{suffix}", "values": [values]} for suffix, values in chunk],
+        }
+        request_json(url, access_token, method="POST", body=body)
 
 
 def sheets_append(sheet_id, tab_name, access_token, rows):
-    """Returns the 1-indexed row number of the first newly-appended row."""
+    """Returns the 1-indexed row number of the first newly-appended row.
+    Appends in chunks so one giant payload can't trip request-size limits;
+    each chunk still lands contiguously since Sheets appends in order."""
     range_name = urllib.parse.quote(f"{tab_name}!A:N")
     url = (f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/"
            f"{range_name}:append?valueInputOption=USER_ENTERED")
-    body = json.dumps({"values": rows}).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body, method="POST",
-        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    updated_range = data["updates"]["updatedRange"]  # e.g. "Sheet1!A6:N9"
-    start_cell = updated_range.split("!")[1].split(":")[0]
-    return int(re.search(r"\d+", start_cell).group())
+
+    first_start_row = None
+    for chunk in chunked(rows, CHUNK_SIZE):
+        data = request_json(url, access_token, method="POST", body={"values": chunk})
+        updated_range = data["updates"]["updatedRange"]  # e.g. "Sheet1!A6:N9"
+        start_cell = updated_range.split("!")[1].split(":")[0]
+        start_row = int(re.search(r"\d+", start_cell).group())
+        if first_start_row is None:
+            first_start_row = start_row
+    return first_start_row
 
 
 def push_to_sheet(rows):
@@ -316,10 +356,12 @@ def push_to_sheet(rows):
     sheet_rows = fetch_sheet_rows(sheet_id, tab_name, access_token)
     existing = index_existing_rows(sheet_rows) if sheet_rows else {}
 
+    value_updates = []   # (range_suffix, [values]) pairs -> one batchUpdate call
+    format_requests = []  # repeatCell dicts -> one batchUpdate call
+
     header = sheet_rows[0] if sheet_rows else []
     if len(header) <= TIME_RANGE_COL or not header[TIME_RANGE_COL].strip():
-        sheets_update(sheet_id, tab_name, access_token,
-                       f"{col_letter(TIME_RANGE_COL)}1", ["Session Time Range"])
+        value_updates.append((f"{col_letter(TIME_RANGE_COL)}1", ["Session Time Range"]))
 
     to_append = []
     updated, appended = 0, 0
@@ -330,17 +372,16 @@ def push_to_sheet(rows):
             row_num, existing_row, is_head = existing[key]
             existing_row += [""] * (len(SHEET_COLUMNS) - len(existing_row))
             if not existing_row[PROD_COUNT_COL] and not existing_row[PROD_CONTEXT_COL]:
-                reset_number_format(sheet_id, access_token, grid_id, row_num, PROD_COUNT_COL)
-                sheets_update(sheet_id, tab_name, access_token,
-                               f"{col_letter(PROD_COUNT_COL)}{row_num}:{col_letter(PROD_CONTEXT_COL)}{row_num}",
-                               [count, context])
+                format_requests.append(format_reset_request(grid_id, row_num, PROD_COUNT_COL))
+                value_updates.append((
+                    f"{col_letter(PROD_COUNT_COL)}{row_num}:{col_letter(PROD_CONTEXT_COL)}{row_num}",
+                    [count, context],
+                ))
                 updated += 1
             if not existing_row[BRANCH_COL]:
-                sheets_update(sheet_id, tab_name, access_token,
-                               f"{col_letter(BRANCH_COL)}{row_num}", [branch])
+                value_updates.append((f"{col_letter(BRANCH_COL)}{row_num}", [branch]))
             if is_head and time_range and not existing_row[TIME_RANGE_COL]:
-                sheets_update(sheet_id, tab_name, access_token,
-                               f"{col_letter(TIME_RANGE_COL)}{row_num}", [time_range])
+                value_updates.append((f"{col_letter(TIME_RANGE_COL)}{row_num}", [time_range]))
         else:
             group = (date, session, branch)
             new_row = [""] * len(SHEET_COLUMNS)
@@ -354,25 +395,86 @@ def push_to_sheet(rows):
             to_append.append(new_row)
             appended += 1
 
+    apply_value_updates(sheet_id, tab_name, access_token, value_updates)
+
     if to_append:
         start_row = sheets_append(sheet_id, tab_name, access_token, to_append)
-        for offset in range(len(to_append)):
-            reset_number_format(sheet_id, access_token, grid_id, start_row + offset, PROD_COUNT_COL)
+        # appended rows are contiguous, so one repeatCell covers the whole block
+        format_requests.append(
+            format_reset_request(grid_id, start_row, PROD_COUNT_COL, num_rows=len(to_append))
+        )
+
+    apply_format_requests(sheet_id, access_token, format_requests)
 
     print(f"[Vault Events Sync] Filled blanks on {updated} existing row(s), "
           f"appended {appended} new row(s) to '{tab_name}'.")
 
 
+def pull_sheet_to_local():
+    """Mirrors Sheet1's current full state (including any manual edits to
+    Training data/Accuracy rate/FP/FN made directly in the Sheet) into a
+    "Vault Events" tab inside report.xlsx. This is a full overwrite of that
+    tab, not a cell-by-cell merge -- the Google Sheet is the source of truth
+    for this data, the local copy just mirrors it for offline reference."""
+    from dotenv import load_dotenv
+    import sync_sheets as ss
+    from openpyxl import Workbook, load_workbook
+
+    load_dotenv(ss.ROOT / ".env")
+    sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
+    tab_name = os.environ.get("VAULT_EVENTS_TAB", "Sheet1").strip()
+    if not sheet_id:
+        print("GOOGLE_SHEET_ID is not set in .env")
+        return
+
+    access_token = ss.get_access_token()
+    sheet_rows = fetch_sheet_rows(sheet_id, tab_name, access_token)
+    if not sheet_rows:
+        print("[Vault Events Pull] Sheet is empty, nothing to pull.")
+        return
+
+    excel_path = ss.ROOT / "report.xlsx"
+    local_tab_name = "Vault Events"
+    wb = load_workbook(excel_path) if excel_path.exists() else Workbook()
+
+    if local_tab_name in wb.sheetnames:
+        wb.remove(wb[local_tab_name])
+    ws = wb.create_sheet(local_tab_name)
+    for row in sheet_rows:
+        ws.append(row)
+
+    if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
+        wb.remove(wb["Sheet"])  # openpyxl's default blank sheet on a new workbook
+
+    wb.save(excel_path)
+    print(f"[Vault Events Pull] Mirrored {len(sheet_rows) - 1} row(s) from '{tab_name}' "
+          f"into {excel_path.name}'s '{local_tab_name}' tab.")
+
+
 def main():
+    if "--pull" in sys.argv:
+        pull_sheet_to_local()
+        return
+
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
 
-    push = "--push" in sys.argv
-    paths = [a for a in sys.argv[1:] if a != "--push"]
+    argv = sys.argv[1:]
+    push = "--push" in argv
+
+    date_filter = None
+    if "--date" in argv:
+        idx = argv.index("--date")
+        date_filter = datetime.strptime(argv[idx + 1], "%Y-%m-%d").date()
+        del argv[idx:idx + 2]
+
+    paths = [a for a in argv if a != "--push"]
 
     states, detections, spans, _ = load_events(paths)
     summary = summarize(states, detections)
+    if date_filter:
+        summary = {k: v for k, v in summary.items() if k[0] == date_filter}
     rows = build_rows(summary, spans)
 
     print(f"{'Date':<10}{'Session':<10}{'Branch':<12}{'Event name':<28}{'Prod count':<12}"
