@@ -152,10 +152,14 @@ def load_events(paths, session_counters=None):
     return states, detections, spans, session_counters
 
 
-def tray_at(states_for_branch, ts):
-    """Most recent (tray, state) as of ts, or (None, "IDLE") if none yet.
-    Uses the full chronological state history regardless of session."""
-    tray, state = None, "IDLE"
+def tray_at(states_for_branch, ts, seed=(None, "IDLE")):
+    """Most recent (tray, state) as of ts, or `seed` if states_for_branch has
+    nothing before ts. `seed` should be the last known (tray, state) carried
+    over from a prior incremental run -- without it, a run whose fetched
+    batch doesn't happen to include the STATE_TRANSITION that set up the
+    currently active tray has no way to know the tray isn't still IDLE, and
+    misclassifies every detection in that gap as "outside of table"."""
+    tray, state = seed
     for row_ts, row_tray, _old, new, _session in states_for_branch:
         if row_ts > ts:
             break
@@ -163,8 +167,11 @@ def tray_at(states_for_branch, ts):
     return tray, state
 
 
-def summarize(states, detections):
-    """(date, branch, session) -> event_name -> {count, context: set(tray)}"""
+def summarize(states, detections, seed_states=None):
+    """(date, branch, session) -> event_name -> {count, context: set(tray)}.
+    seed_states: {branch: (tray, state)} carried over from a prior run (see
+    tray_at) -- defaults to (None, "IDLE") per branch if not given."""
+    seed_states = seed_states or {}
     out = defaultdict(lambda: defaultdict(lambda: {"count": 0, "context": set()}))
 
     for branch, rows in states.items():
@@ -176,9 +183,10 @@ def summarize(states, detections):
 
     for branch, rows in detections.items():
         branch_states = states.get(branch, [])
+        seed = seed_states.get(branch, (None, "IDLE"))
         for ts, label, session in rows:
             key = (ts.date(), branch, session)
-            tray, state = tray_at(branch_states, ts)
+            tray, state = tray_at(branch_states, ts, seed=seed)
             if label == "open":
                 out[key]["Box opened(in frames)"]["count"] += 1
                 out[key]["Box opened(in frames)"]["context"].add(tray)
@@ -190,6 +198,18 @@ def summarize(states, detections):
                 out[key]["Box closed(in frames)"]["context"].add(tray)
 
     return out
+
+
+def latest_known_state(states, seed_states=None):
+    """The (tray, state) each branch ends this run's batch in, for the
+    caller to persist and pass back in as `seed_states` next run. Branches
+    with no new STATE_TRANSITION this run keep their carried-over seed."""
+    result = dict(seed_states or {})
+    for branch, rows in states.items():
+        if rows:
+            _ts, tray, _old, new, _session = rows[-1]  # rows sorted ascending by ts
+            result[branch] = (tray, new)
+    return result
 
 
 EVENT_ORDER = [

@@ -5,12 +5,21 @@ automate.py) never reprocesses a day it has already synced.
 
 Progress is tracked in chat_sync_state.json:
     - last_message_time: only messages posted after this are fetched next run
+                         (kept in exact RFC3339 UTC since that's what the
+                         Chat API filter requires -- see
+                         last_message_time_readable for a human-readable copy)
+    - last_message_time_readable: the same instant, formatted for humans
+                         reading the state file -- not used by the code
     - session_counters:  per-date-per-branch session numbering (S1, S2, ...),
                           continued across runs. A "session" is a burst of
                           activity separated by a real time gap (see
                           parse_vault_logs.SESSION_GAP), not a Chat message
                           boundary -- the bot can post many small messages
                           within one continuous burst.
+    - last_known_tray_state: each branch's last known (tray, state), carried
+                          forward so a run whose fetched batch doesn't
+                          include the STATE_TRANSITION that set up the
+                          current tray still classifies detections correctly
 
 Requires (in .env): CHAT_CLIENT_ID, CHAT_CLIENT_SECRET, VAULT_CHAT_SPACE
 Requires chat_token.json (from a one-time `python3 chat_auth_setup.py` run).
@@ -24,11 +33,23 @@ import re
 import tempfile
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
 import parse_vault_logs as pv
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def readable_ist(iso_utc: str) -> str:
+    """RFC3339 UTC (e.g. from the Chat API's createTime) -> human string in
+    IST, matching the log lines' own timestamp style, e.g.
+    "17 Sep 2026, 06:44:07 PM IST"."""
+    ts = datetime.fromisoformat(iso_utc.replace("Z", "+00:00")).astimezone(IST)
+    return ts.strftime("%d %b %Y, %I:%M:%S %p IST")
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -71,8 +92,10 @@ def get_access_token():
 
 def load_state():
     if STATE_PATH.exists():
-        return json.loads(STATE_PATH.read_text())
-    return {"last_message_time": None, "session_counters": {}}
+        state = json.loads(STATE_PATH.read_text())
+        state.setdefault("last_known_tray_state", {})
+        return state
+    return {"last_message_time": None, "session_counters": {}, "last_known_tray_state": {}}
 
 
 def save_state(state):
@@ -132,7 +155,8 @@ def main():
     finally:
         os.unlink(tmp_path)
 
-    summary = pv.summarize(states, detections)
+    seed_states = {branch: tuple(v) for branch, v in state["last_known_tray_state"].items()}
+    summary = pv.summarize(states, detections, seed_states=seed_states)
     rows = pv.build_rows(summary, spans)
 
     print(f"[Chat Sync] {len(messages)} new message(s), {len(rows)} row(s) derived.")
@@ -142,9 +166,12 @@ def main():
     pv.push_to_sheet(rows)
 
     state["last_message_time"] = messages[-1]["createTime"]
+    state["last_message_time_readable"] = readable_ist(state["last_message_time"])
     state["session_counters"] = session_counters
+    updated_tray_state = pv.latest_known_state(states, seed_states=seed_states)
+    state["last_known_tray_state"] = {branch: list(v) for branch, v in updated_tray_state.items()}
     save_state(state)
-    print(f"[Chat Sync] State saved -- last message time {state['last_message_time']}")
+    print(f"[Chat Sync] State saved -- last message time {state['last_message_time_readable']}")
 
 
 if __name__ == "__main__":
