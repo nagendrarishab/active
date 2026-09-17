@@ -14,6 +14,7 @@ Usage:
 """
 import drive_sync as ds
 import export_report as er
+import fetch_chat_logs as fc
 import run_pipeline as rp
 
 
@@ -38,6 +39,13 @@ def main():
 
     print("=== syncing report.xlsx & Google Sheets ===")
     er.main()
+
+    print("=== syncing new Vault Events Bot chat messages ===")
+    if fc.TOKEN_PATH.exists():
+        fc.main()
+    else:
+        print("chat_token.json not found -- run `python3 chat_auth_setup.py` once "
+              "to enable this step; skipping for now.")
 
 
 if __name__ == "__main__":

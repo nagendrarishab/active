@@ -1,6 +1,7 @@
 __pycache__
 .env
 rclone.conf
+chat_token.json
 venv/
 raw/
 active_tmp/
