@@ -7,3 +7,4 @@ raw/
 active_tmp/
 idle/
 .DS_Store
+*.md

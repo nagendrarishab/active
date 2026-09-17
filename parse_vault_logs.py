@@ -27,6 +27,8 @@ Usage:
                                                                            # only that date
     python3 parse_vault_logs.py --pull   # mirror Sheet1's current state into
                                           # report.xlsx's "Vault Events" tab
+    python3 parse_vault_logs.py --summary  # rebuild a "Summary" tab (one row
+                                            # per date+branch, event totals)
 """
 import json
 import os
@@ -471,9 +473,113 @@ def pull_sheet_to_local():
           f"into {excel_path.name}'s '{local_tab_name}' tab.")
 
 
+SUMMARY_HEADER = ["Date", "Branch", "Sessions"] + EVENT_ORDER
+
+
+def build_summary(sheet_rows):
+    """Aggregates Sheet1's per-session rows into one row per (date, branch):
+    total count per event type across all its sessions that day, plus how
+    many sessions it had -- a manager-readable rollup instead of the raw
+    per-session detail. Forward-fills the same blank Date/Session/Branch
+    cells the raw sheet leaves blank on continuation rows."""
+    totals = defaultdict(lambda: defaultdict(int))
+    sessions_seen = defaultdict(set)
+    last_date, last_session, last_branch = "", "", ""
+
+    for row in sheet_rows[1:]:
+        row = list(row) + [""] * (len(SHEET_COLUMNS) - len(row))
+        date = row[0].strip() if row[0] else last_date
+        session = row[1].strip() if row[1] else last_session
+        branch = row[BRANCH_COL].strip() if row[BRANCH_COL] else last_branch
+        last_date, last_session, last_branch = date, session, branch
+
+        event_name = row[2].strip() if row[2] else ""
+        if not event_name or not date or not branch:
+            continue
+        try:
+            count = int(row[PROD_COUNT_COL])
+        except (TypeError, ValueError):
+            count = 0
+
+        key = (date, branch)
+        totals[key][event_name] += count
+        if session:
+            sessions_seen[key].add(session)
+
+    out_rows = []
+    for date, branch in sorted(totals, key=lambda k: (k[0], k[1])):
+        events = totals[(date, branch)]
+        row = [date, branch, len(sessions_seen[(date, branch)])]
+        row += [events.get(name, 0) for name in EVENT_ORDER]
+        out_rows.append(row)
+    return out_rows
+
+
+def ensure_tab_exists(sheet_id, access_token, tab_name):
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+    data = request_json(url, access_token)
+    if any(s["properties"]["title"] == tab_name for s in data.get("sheets", [])):
+        return
+    batch_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchUpdate"
+    request_json(batch_url, access_token, method="POST",
+                 body={"requests": [{"addSheet": {"properties": {"title": tab_name}}}]})
+
+
+def push_summary_to_sheet():
+    """Rebuilds a "Summary" tab (one row per date+branch, totals per event
+    type) from Sheet1's current state. Always a full clear-and-rewrite --
+    this tab is a derived view, not something anyone edits by hand."""
+    from dotenv import load_dotenv
+    import sync_sheets as ss
+
+    load_dotenv(ss.ROOT / ".env")
+    sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
+    tab_name = os.environ.get("VAULT_EVENTS_TAB", "Sheet1").strip()
+    summary_tab = os.environ.get("VAULT_SUMMARY_TAB", "Summary").strip()
+    if not sheet_id:
+        print("GOOGLE_SHEET_ID is not set in .env")
+        return
+
+    access_token = ss.get_access_token()
+    sheet_rows = fetch_sheet_rows(sheet_id, tab_name, access_token)
+    if not sheet_rows:
+        print(f"[Vault Events Summary] '{tab_name}' is empty, nothing to summarize.")
+        return
+
+    summary_rows = build_summary(sheet_rows)
+    ensure_tab_exists(sheet_id, access_token, summary_tab)
+
+    clear_url = (f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/"
+                 f"{urllib.parse.quote(summary_tab)}!A:Z:clear")
+    request_json(clear_url, access_token, method="POST", body={})
+
+    update_url = (f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/"
+                  f"{urllib.parse.quote(summary_tab)}!A1?valueInputOption=USER_ENTERED")
+    request_json(update_url, access_token, method="PUT",
+                 body={"values": [SUMMARY_HEADER] + summary_rows})
+
+    grid_id = get_grid_id(sheet_id, summary_tab, access_token)
+    bold_header = {"requests": [{
+        "repeatCell": {
+            "range": {"sheetId": grid_id, "startRowIndex": 0, "endRowIndex": 1},
+            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+            "fields": "userEnteredFormat.textFormat.bold",
+        }
+    }]}
+    request_json(f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchUpdate",
+                 access_token, method="POST", body=bold_header)
+
+    print(f"[Vault Events Summary] Wrote {len(summary_rows)} row(s) "
+          f"(one per date+branch) to '{summary_tab}'.")
+
+
 def main():
     if "--pull" in sys.argv:
         pull_sheet_to_local()
+        return
+
+    if "--summary" in sys.argv:
+        push_summary_to_sheet()
         return
 
     if len(sys.argv) < 2:
