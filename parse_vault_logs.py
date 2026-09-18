@@ -267,15 +267,18 @@ def format_time_range(span):
 
 def build_rows(summary, spans):
     """summary -> ordered list of
-    (date, session, branch, event_name, count, context_str, time_range)."""
+    (date, session, branch, event_name, count, context_str, time_range).
+
+    Every event in EVENT_ORDER gets a row for every session, even ones with
+    count=0 -- a human reviewing the actual footage may find the event
+    happened even though it wasn't logged (or vice versa), so an absent row
+    would hide that discrepancy instead of surfacing it for review."""
     rows = []
     for (date, branch, session) in sorted(summary, key=lambda k: (k[0], k[2])):
         events = summary[(date, branch, session)]
         time_range = format_time_range(spans.get((date, branch, session), (None, None)))
         for event_name in EVENT_ORDER:
-            if event_name not in events:
-                continue
-            data = events[event_name]
+            data = events.get(event_name, {"count": 0, "context": set()})
             context = ", ".join(sorted(t for t in data["context"] if t))
             rows.append((date.strftime("%-d %b"), f"S{session}", branch, event_name,
                          data["count"], context, time_range))
