@@ -149,14 +149,14 @@ def main():
         tmp_path = tmp.name
 
     try:
-        states, detections, spans, session_counters = pv.load_events(
+        states, detections, opened_early, spans, session_counters = pv.load_events(
             [tmp_path], session_counters=state["session_counters"]
         )
     finally:
         os.unlink(tmp_path)
 
     seed_states = {branch: tuple(v) for branch, v in state["last_known_tray_state"].items()}
-    summary = pv.summarize(states, detections, seed_states=seed_states)
+    summary = pv.summarize(states, detections, opened_early=opened_early, seed_states=seed_states)
     rows = pv.build_rows(summary, spans)
 
     print(f"[Chat Sync] {len(messages)} new message(s), {len(rows)} row(s) derived.")

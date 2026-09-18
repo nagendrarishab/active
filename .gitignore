@@ -8,3 +8,5 @@ active_tmp/
 idle/
 .DS_Store
 *.md
+*.jsonl
+*.xlsx

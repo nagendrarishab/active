@@ -82,6 +82,14 @@ DETECT_RE = re.compile(
     r"\[OPEN_CLOSE_DETECTION\] (?P<branch>\S+) label=(?P<label>\S+)"
     r"(?: confidence=\d+% box=\([^)]+\))? @ (?P<ts>.+?) IST"
 )
+# The system publishes ALERT_OPENED_EARLY itself whenever YOLO reports "open"
+# while the tray's state isn't TRAY_ON_TABLE -- i.e. exactly what "Box opened
+# outside of table" was previously *inferring* from tray_at(). No real sample
+# line has been seen yet, so this tolerates an optional tray= field and any
+# other fields between branch and the timestamp.
+ALERT_OPENED_EARLY_RE = re.compile(
+    r"\[ALERT_OPENED_EARLY\] (?P<branch>\S+)(?: tray=(?P<tray>\S+))?.*? @ (?P<ts>.+?) IST"
+)
 # Matches any bracketed log line (including WARNING_* ones), used only to
 # widen the session's time span -- not for event counting.
 ANY_LINE_RE = re.compile(r"^\[[A-Z_]+\] (?P<branch>\S+) .* @ (?P<ts>.+?) IST")
@@ -107,8 +115,9 @@ def load_events(paths, session_counters=None):
     if session_counters is None:
         session_counters = {}
 
-    states = defaultdict(list)      # branch -> [(ts, tray, old, new, session)]
-    detections = defaultdict(list)  # branch -> [(ts, label, session)]
+    states = defaultdict(list)       # branch -> [(ts, tray, old, new, session)]
+    detections = defaultdict(list)   # branch -> [(ts, label, session)]
+    opened_early = defaultdict(list)  # branch -> [(ts, tray, session)]
     spans = defaultdict(lambda: [None, None])  # (date, branch, session) -> [min_ts, max_ts]
 
     last_ts = {}          # branch -> last event ts seen
@@ -143,6 +152,10 @@ def load_events(paths, session_counters=None):
                 if m:
                     states[branch].append((ts, m["tray"], m["old"], m["new"], session))
                     continue
+                m = ALERT_OPENED_EARLY_RE.search(line)
+                if m:
+                    opened_early[branch].append((ts, m["tray"], session))
+                    continue
                 m = DETECT_RE.search(line)
                 if m and m["label"] != "None":
                     detections[branch].append((ts, m["label"], session))
@@ -151,7 +164,9 @@ def load_events(paths, session_counters=None):
         states[branch].sort(key=lambda r: r[0])
     for branch in detections:
         detections[branch].sort(key=lambda r: r[0])
-    return states, detections, spans, session_counters
+    for branch in opened_early:
+        opened_early[branch].sort(key=lambda r: r[0])
+    return states, detections, opened_early, spans, session_counters
 
 
 def tray_at(states_for_branch, ts, seed=(None, "IDLE")):
@@ -169,11 +184,17 @@ def tray_at(states_for_branch, ts, seed=(None, "IDLE")):
     return tray, state
 
 
-def summarize(states, detections, seed_states=None):
+def summarize(states, detections, opened_early=None, seed_states=None):
     """(date, branch, session) -> event_name -> {count, context: set(tray)}.
     seed_states: {branch: (tray, state)} carried over from a prior run (see
-    tray_at) -- defaults to (None, "IDLE") per branch if not given."""
+    tray_at) -- defaults to (None, "IDLE") per branch if not given.
+
+    "Box opened outside of table" is counted only from real ALERT_OPENED_EARLY
+    lines -- the system's own event for this exact condition. There is no
+    inferred fallback: if a run's input has no such lines, this event simply
+    doesn't appear for that run rather than guessing from tray_at() state."""
     seed_states = seed_states or {}
+    opened_early = opened_early or {}
     out = defaultdict(lambda: defaultdict(lambda: {"count": 0, "context": set()}))
 
     for branch, rows in states.items():
@@ -188,16 +209,19 @@ def summarize(states, detections, seed_states=None):
         seed = seed_states.get(branch, (None, "IDLE"))
         for ts, label, session in rows:
             key = (ts.date(), branch, session)
-            tray, state = tray_at(branch_states, ts, seed=seed)
+            tray, _state = tray_at(branch_states, ts, seed=seed)
             if label == "open":
                 out[key]["Box opened(in frames)"]["count"] += 1
                 out[key]["Box opened(in frames)"]["context"].add(tray)
-                if state != "TRAY_ON_TABLE":
-                    out[key]["Box opened outside of table"]["count"] += 1
-                    out[key]["Box opened outside of table"]["context"].add(tray)
             elif label == "closed":
                 out[key]["Box closed(in frames)"]["count"] += 1
                 out[key]["Box closed(in frames)"]["context"].add(tray)
+
+    for branch, rows in opened_early.items():
+        for ts, tray, session in rows:
+            key = (ts.date(), branch, session)
+            out[key]["Box opened outside of table"]["count"] += 1
+            out[key]["Box opened outside of table"]["context"].add(tray)
 
     return out
 
@@ -597,8 +621,8 @@ def main():
 
     paths = [a for a in argv if a != "--push"]
 
-    states, detections, spans, _ = load_events(paths)
-    summary = summarize(states, detections)
+    states, detections, opened_early, spans, _ = load_events(paths)
+    summary = summarize(states, detections, opened_early=opened_early)
     if date_filter:
         summary = {k: v for k, v in summary.items() if k[0] == date_filter}
     rows = build_rows(summary, spans)
